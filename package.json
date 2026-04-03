@@ -1,19 +1,32 @@
 {
   "name": "changegen",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Generate clean, categorized changelogs from git commit history",
   "keywords": ["changelog", "git", "conventional-commits", "cli"],
   "license": "MIT",
+  "author": "Paperclip",
   "main": "./dist/index.js",
   "bin": {
     "changegen": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist/categorize.js",
+    "dist/categorize.d.ts",
+    "dist/format.js",
+    "dist/format.d.ts",
+    "dist/git.js",
+    "dist/git.d.ts",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/types.js",
+    "dist/types.d.ts",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
     "prepare": "tsc",
+    "prepublishOnly": "npm run build && npm test",
     "test": "node --test dist/test/categorize.test.js dist/test/format.test.js dist/test/git.test.js",
     "test:src": "tsc && npm test",
     "dev": "ts-node src/index.ts"
@@ -24,9 +37,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/changegen.git"
   }
 }
