@@ -27,7 +27,7 @@
     "build": "tsc",
     "prepare": "tsc",
     "prepublishOnly": "npm run build && npm test",
-    "test": "node --test dist/test/categorize.test.js dist/test/format.test.js dist/test/git.test.js",
+    "test": "node --test dist/test/categorize.test.js dist/test/format.test.js dist/test/git.test.js dist/test/server.test.js",
     "test:src": "tsc && npm test",
     "dev": "ts-node src/index.ts"
   },
