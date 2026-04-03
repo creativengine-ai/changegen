@@ -1,5 +1,5 @@
 {
-  "name": "changegen",
+  "name": "@bbs-company/changegen",
   "version": "1.0.0",
   "description": "Generate clean, categorized changelogs from git commit history",
   "keywords": ["changelog", "git", "conventional-commits", "cli"],
