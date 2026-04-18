@@ -1,0 +1,69 @@
+name: 'changegen'
+description: 'Generate clean, categorized changelogs from git commit history using Conventional Commits'
+author: 'creativengine-ai'
+
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  since:
+    description: 'Start from a tag, commit hash, or date. Defaults to the latest git tag.'
+    required: false
+    default: ''
+  until:
+    description: 'End at a tag, commit hash, or date. Defaults to HEAD.'
+    required: false
+    default: ''
+  version:
+    description: 'Version label for the changelog header.'
+    required: false
+    default: 'Unreleased'
+  output-file:
+    description: 'Path to write the changelog. Set to empty string to skip writing the file.'
+    required: false
+    default: 'CHANGELOG.md'
+  working-directory:
+    description: 'Path to the git repository. Defaults to the workspace root.'
+    required: false
+    default: '.'
+
+outputs:
+  changelog:
+    description: 'Generated changelog in Markdown format'
+    value: ${{ steps.run.outputs.changelog }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run changegen
+      id: run
+      shell: bash
+      run: |
+        ARGS="--output markdown"
+
+        if [ -n "${{ inputs.since }}" ]; then
+          ARGS="$ARGS --since '${{ inputs.since }}'"
+        fi
+
+        if [ -n "${{ inputs.until }}" ]; then
+          ARGS="$ARGS --until '${{ inputs.until }}'"
+        fi
+
+        if [ -n "${{ inputs.version }}" ] && [ "${{ inputs.version }}" != "Unreleased" ]; then
+          ARGS="$ARGS --version '${{ inputs.version }}'"
+        fi
+
+        if [ -z "${{ inputs.output-file }}" ]; then
+          ARGS="$ARGS --no-file"
+        else
+          ARGS="$ARGS --out '${{ inputs.output-file }}'"
+        fi
+
+        CHANGELOG=$(cd "${{ inputs.working-directory }}" && npx --yes @creativengine-ai/changegen $ARGS 2>&1 || true)
+
+        # Write multiline output safely
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "changelog<<$EOF" >> "$GITHUB_OUTPUT"
+        echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+        echo "$EOF" >> "$GITHUB_OUTPUT"

@@ -133,6 +133,98 @@ Documentation
   7 commits · 2 features · 2 fixes · 1 breaking
 ```
 
+## GitHub Actions
+
+Use changegen directly in your CI pipeline with the official GitHub Action.
+
+### Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `since` | Start from a tag, commit hash, or date | latest tag |
+| `until` | End at a tag, commit hash, or date | HEAD |
+| `version` | Version label in the changelog header | `Unreleased` |
+| `output-file` | Write markdown to this path (empty = no file) | `CHANGELOG.md` |
+| `working-directory` | Path to the git repository | `.` |
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `changelog` | Generated changelog in Markdown format |
+
+### Examples
+
+**Keep `CHANGELOG.md` up to date on every push to `main`:**
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
+- uses: creativengine-ai/changegen@v1
+  with:
+    version: Unreleased
+    output-file: CHANGELOG.md
+```
+
+**Post as a PR comment:**
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
+- name: Generate changelog
+  id: changelog
+  uses: creativengine-ai/changegen@v1
+  with:
+    since: ${{ github.event.pull_request.base.sha }}
+    output-file: ''
+
+- uses: actions/github-script@v7
+  with:
+    script: |
+      github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.issue.number,
+        body: process.env.CHANGELOG,
+      });
+  env:
+    CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+```
+
+**Use as a GitHub Release body on tag push:**
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
+- name: Generate changelog
+  id: changelog
+  uses: creativengine-ai/changegen@v1
+  with:
+    version: ${{ github.ref_name }}
+    output-file: ''
+
+- uses: actions/github-script@v7
+  with:
+    script: |
+      github.rest.repos.createRelease({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        tag_name: context.ref.replace('refs/tags/', ''),
+        name: context.ref.replace('refs/tags/', ''),
+        body: process.env.CHANGELOG,
+      });
+  env:
+    CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+```
+
+See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a full working example covering all three patterns.
+
 ## Self-hosting the API server
 
 `changegen` ships an HTTP server (`src/server.ts`) that exposes a REST API with Lemon Squeezy subscription gating.
