@@ -103,6 +103,7 @@ describe('HTTP server', () => {
   before(() => {
     // Start on a random port; no API key so auth is disabled
     delete process.env.CHANGEGEN_API_KEY;
+    delete process.env.STRIPE_SECRET_KEY;
     server = createServer();
     return new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   });
@@ -168,6 +169,28 @@ describe('HTTP server', () => {
   it('unknown route returns 404', async () => {
     const res = await request(server, { method: 'GET', path: '/unknown' });
     assert.equal(res.status, 404);
+  });
+
+  it('POST /api/subscribe returns 503 when Stripe is not configured', async () => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/subscribe',
+    });
+    assert.equal(res.status, 503);
+    const json = JSON.parse(res.body);
+    assert.match(json.error, /stripe is not configured/i);
+  });
+
+  it('POST /api/webhook returns 503 when webhook secret is not configured', async () => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/webhook',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(res.status, 503);
+    const json = JSON.parse(res.body);
+    assert.match(json.error, /webhook secret is not configured/i);
   });
 });
 
