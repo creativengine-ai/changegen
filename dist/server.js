@@ -32,9 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sanitizeRepoUrl = sanitizeRepoUrl;
 exports.createServer = createServer;
@@ -44,7 +41,6 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const crypto = __importStar(require("crypto"));
 const child_process_1 = require("child_process");
-const stripe_1 = __importDefault(require("stripe"));
 const git_1 = require("./git");
 const categorize_1 = require("./categorize");
 const format_1 = require("./format");
@@ -52,22 +48,8 @@ const format_1 = require("./format");
 // Configuration
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
-const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || '';
-// ---------------------------------------------------------------------------
-// Stripe client (lazy — only instantiated when a key is present)
-// ---------------------------------------------------------------------------
-let _stripe = null;
-function getStripe() {
-    if (!_stripe) {
-        if (!STRIPE_SECRET_KEY) {
-            throw new Error('STRIPE_SECRET_KEY is not configured');
-        }
-        _stripe = new stripe_1.default(STRIPE_SECRET_KEY);
-    }
-    return _stripe;
-}
+const GUMROAD_PRODUCT_URL = process.env.GUMROAD_PRODUCT_URL || '';
+const GUMROAD_SELLER_ID = process.env.GUMROAD_SELLER_ID || '';
 const subscriptions = new Map();
 const subToKey = new Map();
 function generateApiKey() {
@@ -188,8 +170,7 @@ function sendHTML(res, status, html) {
 // ---------------------------------------------------------------------------
 function checkAuth(req) {
     const staticKey = process.env.CHANGEGEN_API_KEY || '';
-    // If no static key AND Stripe is not configured, auth is disabled (dev mode)
-    if (!staticKey && !STRIPE_SECRET_KEY)
+    if (!staticKey && !GUMROAD_SELLER_ID)
         return true;
     const authHeader = req.headers['authorization'] || '';
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -230,84 +211,51 @@ function serveStatic(req, res) {
     return true;
 }
 // ---------------------------------------------------------------------------
-// Stripe handlers
+// Gumroad handlers
 // ---------------------------------------------------------------------------
-async function handleSubscribe(req, res) {
-    if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID) {
-        sendJSON(res, 503, { error: 'Stripe is not configured' });
+async function handleSubscribe(_req, res) {
+    if (!GUMROAD_PRODUCT_URL) {
+        sendJSON(res, 503, { error: 'Gumroad is not configured' });
         return;
     }
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers.host || `localhost:${PORT}`;
-    const baseUrl = `${proto}://${host}`;
-    try {
-        const stripe = getStripe();
-        const session = await stripe.checkout.sessions.create({
-            mode: 'subscription',
-            line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-            success_url: `${baseUrl}/subscription-success`,
-            cancel_url: `${baseUrl}/`,
-        });
-        if (!session.url) {
-            sendJSON(res, 500, { error: 'No checkout URL returned' });
-            return;
-        }
-        sendJSON(res, 200, { url: session.url });
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        sendJSON(res, 500, { error: message });
-    }
+    sendJSON(res, 200, { url: GUMROAD_PRODUCT_URL });
 }
 async function handleWebhook(req, res) {
-    if (!STRIPE_WEBHOOK_SECRET) {
-        sendJSON(res, 503, { error: 'Webhook secret is not configured' });
-        return;
-    }
-    const sig = req.headers['stripe-signature'];
-    if (!sig || Array.isArray(sig)) {
-        sendJSON(res, 400, { error: 'Missing stripe-signature header' });
+    if (!GUMROAD_SELLER_ID) {
+        sendJSON(res, 503, { error: 'Webhook is not configured' });
         return;
     }
     let rawBody;
     try {
-        rawBody = await readBodyBuffer(req);
+        rawBody = await readBody(req);
     }
     catch {
         sendJSON(res, 400, { error: 'Failed to read request body' });
         return;
     }
-    let event;
-    try {
-        const stripe = getStripe();
-        event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
-    }
-    catch {
-        sendJSON(res, 400, { error: 'Webhook signature verification failed' });
+    const params = new URLSearchParams(rawBody);
+    const sellerId = params.get('seller_id') || '';
+    if (sellerId !== GUMROAD_SELLER_ID) {
+        sendJSON(res, 403, { error: 'Invalid seller' });
         return;
     }
-    if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        const subscriptionId = typeof session.subscription === 'string'
-            ? session.subscription
-            : (session.subscription?.id ?? '');
-        if (subscriptionId) {
-            const apiKey = generateApiKey();
-            subscriptions.set(apiKey, { subscriptionId, active: true });
-            subToKey.set(subscriptionId, apiKey);
-            console.log(`[webhook] checkout completed: ${subscriptionId} — API key issued`);
-        }
+    const resourceName = params.get('resource_name') || '';
+    const subscriptionId = params.get('subscription_id') || '';
+    if (resourceName === 'sale' && subscriptionId) {
+        const apiKey = generateApiKey();
+        subscriptions.set(apiKey, { subscriptionId, active: true });
+        subToKey.set(subscriptionId, apiKey);
+        console.log(`[webhook] sale: subscription ${subscriptionId} — API key issued`);
     }
-    else if (event.type === 'customer.subscription.deleted') {
-        const subscription = event.data.object;
-        const apiKey = subToKey.get(subscription.id);
+    else if ((resourceName === 'subscription_cancelled' || resourceName === 'subscription_ended') &&
+        subscriptionId) {
+        const apiKey = subToKey.get(subscriptionId);
         if (apiKey) {
             const record = subscriptions.get(apiKey);
-            if (record) {
+            if (record)
                 record.active = false;
-            }
         }
-        console.log(`[webhook] subscription deleted: ${subscription.id}`);
+        console.log(`[webhook] ${resourceName}: subscription ${subscriptionId}`);
     }
     sendJSON(res, 200, { received: true });
 }
@@ -413,7 +361,7 @@ async function onRequest(req, res) {
         if (serveStatic(req, res))
             return;
     }
-    // Webhook — rate limited, but no auth (Stripe authenticates via signature)
+    // Webhook — rate limited, no auth (Gumroad authenticates via seller_id)
     if (method === 'POST' && pathname === '/api/webhook') {
         if (!allowRequest(ip)) {
             sendJSON(res, 429, { error: 'Too Many Requests' });
@@ -465,11 +413,11 @@ if (require.main === module) {
     const server = createServer();
     server.listen(PORT, () => {
         console.log(`changegen server listening on port ${PORT}`);
-        if (!process.env.CHANGEGEN_API_KEY && !STRIPE_SECRET_KEY) {
-            console.warn('Warning: neither CHANGEGEN_API_KEY nor STRIPE_SECRET_KEY is set — authentication is disabled');
+        if (!process.env.CHANGEGEN_API_KEY && !GUMROAD_SELLER_ID) {
+            console.warn('Warning: neither CHANGEGEN_API_KEY nor GUMROAD_SELLER_ID is set — authentication is disabled');
         }
-        if (!STRIPE_SECRET_KEY) {
-            console.warn('Warning: STRIPE_SECRET_KEY is not set — /api/subscribe and /api/webhook are disabled');
+        if (!GUMROAD_PRODUCT_URL) {
+            console.warn('Warning: GUMROAD_PRODUCT_URL is not set — /api/subscribe is disabled');
         }
     });
 }

@@ -113,7 +113,7 @@ function request(server, options) {
     (0, node_test_1.before)(() => {
         // Start on a random port; no API key so auth is disabled
         delete process.env.CHANGEGEN_API_KEY;
-        delete process.env.STRIPE_SECRET_KEY;
+        delete process.env.GUMROAD_SELLER_ID;
         server = (0, server_1.createServer)();
         return new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     });
@@ -171,25 +171,25 @@ function request(server, options) {
         const res = await request(server, { method: 'GET', path: '/unknown' });
         strict_1.default.equal(res.status, 404);
     });
-    (0, node_test_1.it)('POST /api/subscribe returns 503 when Stripe is not configured', async () => {
+    (0, node_test_1.it)('POST /api/subscribe returns 503 when Gumroad is not configured', async () => {
         const res = await request(server, {
             method: 'POST',
             path: '/api/subscribe',
         });
         strict_1.default.equal(res.status, 503);
         const json = JSON.parse(res.body);
-        strict_1.default.match(json.error, /stripe is not configured/i);
+        strict_1.default.match(json.error, /gumroad is not configured/i);
     });
-    (0, node_test_1.it)('POST /api/webhook returns 503 when webhook secret is not configured', async () => {
+    (0, node_test_1.it)('POST /api/webhook returns 503 when webhook is not configured', async () => {
         const res = await request(server, {
             method: 'POST',
             path: '/api/webhook',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'seller_id=test',
         });
         strict_1.default.equal(res.status, 503);
         const json = JSON.parse(res.body);
-        strict_1.default.match(json.error, /webhook secret is not configured/i);
+        strict_1.default.match(json.error, /webhook is not configured/i);
     });
 });
 (0, node_test_1.describe)('HTTP server auth', () => {

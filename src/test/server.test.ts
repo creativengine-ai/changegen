@@ -103,7 +103,7 @@ describe('HTTP server', () => {
   before(() => {
     // Start on a random port; no API key so auth is disabled
     delete process.env.CHANGEGEN_API_KEY;
-    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.GUMROAD_SELLER_ID;
     server = createServer();
     return new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   });
@@ -171,26 +171,26 @@ describe('HTTP server', () => {
     assert.equal(res.status, 404);
   });
 
-  it('POST /api/subscribe returns 503 when Stripe is not configured', async () => {
+  it('POST /api/subscribe returns 503 when Gumroad is not configured', async () => {
     const res = await request(server, {
       method: 'POST',
       path: '/api/subscribe',
     });
     assert.equal(res.status, 503);
     const json = JSON.parse(res.body);
-    assert.match(json.error, /stripe is not configured/i);
+    assert.match(json.error, /gumroad is not configured/i);
   });
 
-  it('POST /api/webhook returns 503 when webhook secret is not configured', async () => {
+  it('POST /api/webhook returns 503 when webhook is not configured', async () => {
     const res = await request(server, {
       method: 'POST',
       path: '/api/webhook',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'seller_id=test',
     });
     assert.equal(res.status, 503);
     const json = JSON.parse(res.body);
-    assert.match(json.error, /webhook secret is not configured/i);
+    assert.match(json.error, /webhook is not configured/i);
   });
 });
 
